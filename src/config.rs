@@ -17,10 +17,6 @@ impl Config {
     pub fn load() -> Self {
         let _ = dotenvy::dotenv();
 
-        for (key, value) in env::vars() {
-            println!("{key}: {value}");
-        }
-
         Config {
             postgres: PostgresConfig {
                 user: env::var("POSTGRES_USER").expect("missing POSTGRES_USER"),
