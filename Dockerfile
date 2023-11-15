@@ -5,6 +5,6 @@ COPY . .
 RUN cargo build --release --target x86_64-unknown-linux-musl
 
 FROM scratch
-COPY  --from=builder /rust-crud/target/x86_64-unknown-linux-musl/release/rust-postgres /rust-crud
-ENTRYPOINT ["/rust-crud"]
+COPY --from=builder /rust-crud/target/x86_64-unknown-linux-musl/release/rust-postgres /rust-postgres
+ENTRYPOINT [ "/rust-postgres" ]
 EXPOSE 3000

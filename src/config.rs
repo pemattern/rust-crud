@@ -23,7 +23,7 @@ impl Config {
                 password: env::var("POSTGRES_PASSWORD").expect("missing POSTGRES_PASSWORD"),
                 host: env::var("POSTGRES_HOST").expect("missing POSTGRES_HOST"),
                 port: env::var("POSTGRES_PORT").expect("missing POSTGRES_PORT"),
-                database: env::var("POSTGRES_DATABASE").expect("missing POSTGRES_DATABASE"),
+                database: env::var("POSTGRES_DB").expect("missing POSTGRES_DB"),
             },
         }
     }

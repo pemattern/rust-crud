@@ -5,10 +5,9 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_HOST: ${HOSTNAME}
       POSTGRES_PORT: ${POSTGRES_PORT}
-      POSTGRES_DATABASE: ${POSTGRES_DATABASE}
-      RUST_BACKTRACE: 1
+      POSTGRES_DB: ${POSTGRES_DB}
     build:
       context: .
       dockerfile: Dockerfile
@@ -22,6 +21,7 @@ services:
     restart: always
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     volumes:

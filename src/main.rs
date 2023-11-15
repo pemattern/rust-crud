@@ -1,40 +1,39 @@
 mod config;
 mod user;
 
-use std::net::SocketAddr;
-
+use std::{net::SocketAddr, env};
 use axum::{
     routing::{get, post},
     Extension, Router,
 };
-
 use sqlx::postgres::PgPoolOptions;
 use config::Config;
 
-
 #[tokio::main]
-async fn main() {
-    let cfg = Config::load();
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = Config::load();
 
     let database_url = format!("postgres://{}:{}@{}:{}/{}",
-        cfg.postgres.user,
-        cfg.postgres.password,
-        //cfg.postgres.host,
-        std::env::var("HOSTNAME").unwrap(),
-        cfg.postgres.port,
-        cfg.postgres.database,
+        config.postgres.user,
+        config.postgres.password,
+        config.postgres.host,
+        config.postgres.port,
+        config.postgres.database,
     );
+
+    env::set_var("DATABASE_URL", &database_url);
 
     println!("{database_url}");
 
     let pool = PgPoolOptions::new()
-        .max_connections(5)
+        //.max_connections(5)
         //.idle_timeout(tokio::time::Duration::from_secs(5))
         .connect(database_url.as_str())
-        .await
-        .unwrap();
+        .await?;
 
-    //sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+    println!("got here");
+
+    sqlx::migrate!("./migrations").run(&pool).await?;
 
     let app = Router::new()
         .route("/user/:uuid", get(user::get_user))
@@ -44,6 +43,7 @@ async fn main() {
 
     axum::Server::bind(&SocketAddr::from(([0, 0, 0, 0], 3000)))
         .serve(app.into_make_service())
-        .await
-        .unwrap();
+        .await?;
+
+    Ok(())
 }

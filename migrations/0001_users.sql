@@ -3,5 +3,5 @@ CREATE TABLE IF NOT EXISTS users (
     name text NOT NULL,
     password text NOT NULL,
     created_on timestamptz NOT NULL,
-    updated_on timestamptz NOT NULL,
+    updated_on timestamptz NOT NULL
 )
