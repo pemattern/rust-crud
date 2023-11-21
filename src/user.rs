@@ -1,4 +1,4 @@
-use axum::{extract::Path, Json, http::StatusCode, Extension};
+use axum::{extract::Path, Json, response::{IntoResponse, Response}, http::StatusCode, Extension};
 use chrono::{self, DateTime, Local};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -20,42 +20,50 @@ pub struct PostUser {
 }
 
 pub async fn get_user(
-    Path(uuid): Path<Uuid>,
     Extension(pool): Extension<PgPool>,
-) -> Result<Json<GetUser>, StatusCode> {
+    Path(uuid): Path<Uuid>,
+) -> Response {
     let query = "SELECT * FROM users WHERE uuid = $1";
 
-    let user = match sqlx::query_as::<_, GetUser>(query).bind(&uuid).fetch_one(&pool).await {
-        Ok(user) => user,
-        Err(_) => return Err(StatusCode::NOT_FOUND),
-    };
-
-    Ok(Json(user))
+    match sqlx::query_as::<_, GetUser>(query).bind(&uuid).fetch_one(&pool).await {
+        Ok(user) => (StatusCode::OK, Json(user)).into_response(),
+        Err(sqlx::Error::RowNotFound) => (StatusCode::NOT_FOUND, "could not find user").into_response(),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "failed to get user").into_response(),
+    }    
 }
 
-pub async fn get_all_users(Extension(pool): Extension<PgPool>) -> Result<Json<Vec<GetUser>>, StatusCode> {
+pub async fn get_all_users(Extension(pool): Extension<PgPool>) -> Response {
     let query = "SELECT * FROM users";
 
-    let users = match sqlx::query_as::<_, GetUser>(query).fetch_all(&pool).await {
-        Ok(users) => users,
-        Err(_) => return Err(StatusCode::NOT_FOUND),
-    };
-
-    Ok(Json(users))    
+    match sqlx::query_as::<_, GetUser>(query).fetch_all(&pool).await {
+        Ok(users) => (StatusCode::OK, Json(users)).into_response(),
+        Err(sqlx::Error::RowNotFound) => (StatusCode::NOT_FOUND, "no users found").into_response(),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "failed to get users").into_response(),
+    }   
 }
 
-pub async fn post_user(Extension(pool): Extension<PgPool>, Json(user): Json<PostUser>) -> StatusCode {
-    let query = "INSERT INTO users (uuid, name, password, created_on, updated_on) VALUES ($1, $2, $3, $4, $5)";
+pub async fn post_user(Extension(pool): Extension<PgPool>, Json(user): Json<PostUser>) -> Response {
+    let query = "INSERT INTO users (uuid, name, password, created_on, updated_on) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5)";
+
+    let now = chrono::offset::Local::now();
 
     match sqlx::query(query)
     .bind(&Uuid::new_v4())
     .bind(&user.name)
     .bind(&user.password)
-    .bind(&chrono::offset::Local::now())
-    .bind(&chrono::offset::Local::now())
+    .bind(&now)
+    .bind(&now)
     .execute(&pool).await {
-        Ok(_) => StatusCode::CREATED,
-        Err(_) => StatusCode::BAD_REQUEST,
+        Ok(_) => (StatusCode::CREATED, "created user").into_response(),
+        Err(sqlx::Error::Database(error)) => {
+            // Unique violation code
+            if error.code().unwrap() == "23505" {
+                (StatusCode::CONFLICT, "user already exists").into_response()
+            } else {
+                (StatusCode::BAD_REQUEST, "could not create user").into_response()
+            }
+        },
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "failed to create user").into_response()
     }
 }
 

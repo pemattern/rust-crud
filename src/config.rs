@@ -1,4 +1,4 @@
-use dotenvy;
+use dotenv;
 use std::env;
 
 pub struct Config {
@@ -15,7 +15,7 @@ pub struct PostgresConfig {
 
 impl Config {
     pub fn load() -> Self {
-        let _ = dotenvy::dotenv();
+        let _ = dotenv::dotenv();
 
         Config {
             postgres: PostgresConfig {

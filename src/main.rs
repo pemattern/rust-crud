@@ -23,15 +23,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     env::set_var("DATABASE_URL", &database_url);
 
-    println!("{database_url}");
+    println!("connection URL: {database_url}");
 
     let pool = PgPoolOptions::new()
-        //.max_connections(5)
-        //.idle_timeout(tokio::time::Duration::from_secs(5))
         .connect(database_url.as_str())
         .await?;
 
-    println!("got here");
+    println!("successfully connected to the postgres database");
 
     sqlx::migrate!("./migrations").run(&pool).await?;
 
@@ -41,7 +39,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/user", post(user::post_user))
         .layer(Extension(pool));
 
-    axum::Server::bind(&SocketAddr::from(([0, 0, 0, 0], 3000)))
+    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
+
+    axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await?;
 
