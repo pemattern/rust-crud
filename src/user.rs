@@ -1,4 +1,18 @@
-use axum::{extract::Path, Json, response::{IntoResponse, Response}, http::StatusCode, Extension};
+use axum::{
+    extract::Path,
+    Json,
+    response::{
+        IntoResponse,
+        Response
+    },
+    http::StatusCode,
+    Extension,
+    Router,
+    routing::{
+        get,
+        post
+    }
+};
 use chrono::{self, DateTime, Local};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -17,6 +31,13 @@ pub struct GetUser {
 pub struct PostUser {
     pub name: String,
     pub password: String,
+}
+
+pub fn router() -> Router {
+    Router::new()
+        .route("/user/:uuid", get(get_user))
+        .route("/users", get(get_all_users))
+        .route("/user", post(post_user))
 }
 
 pub async fn get_user(

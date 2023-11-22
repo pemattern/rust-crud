@@ -1,13 +1,14 @@
 mod config;
 mod user;
+mod jwt;
 
-use std::{net::SocketAddr, env};
+use std::net::SocketAddr;
 use axum::{
-    routing::{get, post},
-    Extension, Router,
+    Extension, Router, middleware, routing::get,
 };
 use sqlx::postgres::PgPoolOptions;
 use config::Config;
+use tower::ServiceBuilder;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -21,8 +22,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.postgres.database,
     );
 
-    env::set_var("DATABASE_URL", &database_url);
-
     println!("connection URL: {database_url}");
 
     let pool = PgPoolOptions::new()
@@ -33,16 +32,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     sqlx::migrate!("./migrations").run(&pool).await?;
 
-    let app = Router::new()
-        .route("/user/:uuid", get(user::get_user))
-        .route("/users", get(user::get_all_users))
-        .route("/user", post(user::post_user))
-        .layer(Extension(pool));
+    let router = Router::new()
+        .merge(user::router())
+        .layer(
+            ServiceBuilder::new()
+                .layer(Extension(pool))
+                .layer(middleware::from_fn(jwt::authorize))
+        )
+        .route("/token", get(jwt::new));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
 
     axum::Server::bind(&addr)
-        .serve(app.into_make_service())
+        .serve(router.into_make_service())
         .await?;
 
     Ok(())
