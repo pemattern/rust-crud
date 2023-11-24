@@ -8,7 +8,6 @@ use axum::{
 };
 use sqlx::postgres::PgPoolOptions;
 use config::Config;
-use tower::ServiceBuilder;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -34,12 +33,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let router = Router::new()
         .merge(user::router())
-        .layer(
-            ServiceBuilder::new()
-                .layer(Extension(pool))
-                .layer(middleware::from_fn(jwt::authorize))
-        )
-        .route("/token", get(jwt::new));
+        .layer(middleware::from_fn(jwt::authorize))
+        .route("/token", get(jwt::new))
+        .layer(Extension(pool));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
 
