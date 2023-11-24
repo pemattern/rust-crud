@@ -64,7 +64,7 @@ pub async fn get_all_users(Extension(pool): Extension<PgPool>) -> Response {
 }
 
 pub async fn post_user(Extension(pool): Extension<PgPool>, Json(user): Json<PostUser>) -> Response {
-    let query = "INSERT INTO users (uuid, name, password, created_on, updated_on) VALUES ($1, $2, crypt($3, gen_salt('bf')), $4, $5)";
+    let query = "INSERT INTO users (uuid, name, password, created_on, updated_on) VALUES ($1, $2, $3, $4, $5)";
 
     let now = chrono::offset::Local::now();
 

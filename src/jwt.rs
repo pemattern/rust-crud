@@ -3,11 +3,15 @@ use std::env;
 use axum::{
     http::{Request, StatusCode},
     middleware::Next,
-    response::{IntoResponse, Response}
+    response::{IntoResponse, Response},
+    TypedHeader, headers::{authorization::Basic, Authorization}, Extension,
 };
 use chrono::{Utc, Duration};
 use jsonwebtoken::{encode, EncodingKey, Header, DecodingKey, decode, Validation};
 use serde::{Serialize, Deserialize};
+use sqlx::PgPool;
+
+use crate::user::GetUser;
 
 #[derive(Serialize, Deserialize)]
 pub struct Claims {
@@ -17,7 +21,22 @@ pub struct Claims {
     iss: String,
 }
 
-pub async fn new() -> Response {
+pub async fn new(Extension(pool): Extension<PgPool>,
+    TypedHeader(authorization): TypedHeader<Authorization<Basic>>) -> Response {
+    let query = "SELECT * FROM users WHERE name = $1 AND password = $2";
+    
+    let sub = match sqlx::query_as::<_, GetUser>(query)
+        .bind(&authorization.username())
+        .bind(&authorization.password())
+        .fetch_one(&pool)
+        .await {
+            Ok(user) => user.uuid.to_string(),
+            Err(error) => {
+                println!("{}", error);
+                return StatusCode::UNAUTHORIZED.into_response();
+            },
+        };
+
     let now = Utc::now();
     let iat = now.timestamp() as usize;
 
@@ -29,7 +48,7 @@ pub async fn new() -> Response {
         Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
 
-    let claims = Claims { sub: "Subject".to_string(), exp, iat, iss };
+    let claims = Claims { sub, exp, iat, iss };
     let secret = match env::var("JWT_SECRET") {
         Ok(secret) => secret,
         Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
@@ -55,7 +74,7 @@ pub async fn authorize<B>(request: Request<B>, next: Next<B>) -> Response {
     let mut validation = Validation::new(jsonwebtoken::Algorithm::HS256);
     validation.set_issuer(&[issuer]);
 
-    let authorization_header = match request.headers().get("authorization") {
+    let authorization_header = match request.headers().get("Authorization") {
         Some(v) => v,
         None => return StatusCode::UNAUTHORIZED.into_response(),
     };
