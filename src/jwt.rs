@@ -4,7 +4,7 @@ use axum::{
     http::{Request, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
-    TypedHeader, headers::{authorization::Basic, Authorization}, Extension,
+    TypedHeader, headers::{authorization::Basic, Authorization}, Extension, Router, routing::get,
 };
 use chrono::{Utc, Duration};
 use jsonwebtoken::{encode, EncodingKey, Header, DecodingKey, decode, Validation};
@@ -19,6 +19,11 @@ pub struct Claims {
     exp: usize,
     iat: usize,
     iss: String,
+}
+
+pub fn router() -> Router {
+    Router::new()
+        .route("/token", get(new))
 }
 
 pub async fn new(Extension(pool): Extension<PgPool>,

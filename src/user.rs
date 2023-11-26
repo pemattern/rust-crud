@@ -11,12 +11,15 @@ use axum::{
     routing::{
         get,
         post
-    }
+    }, middleware
 };
 use chrono::{self, DateTime, Local};
 use serde::{Deserialize, Serialize};
+use tower::ServiceBuilder;
 use uuid::Uuid;
 use sqlx::postgres::PgPool;
+
+use crate::jwt;
 
 #[derive(sqlx::FromRow, Serialize, Deserialize)]
 pub struct GetUser {
@@ -38,6 +41,10 @@ pub fn router() -> Router {
         .route("/user/:uuid", get(get_user))
         .route("/users", get(get_all_users))
         .route("/user", post(post_user))
+        .layer(
+            ServiceBuilder::new()
+            .layer(middleware::from_fn(jwt::authorize))
+        )
 }
 
 pub async fn get_user(

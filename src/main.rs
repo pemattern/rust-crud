@@ -1,13 +1,15 @@
 mod config;
 mod user;
 mod jwt;
+mod keygen;
 
 use std::net::SocketAddr;
 use axum::{
-    Extension, Router, middleware, routing::get,
+    Extension, Router, routing::get,
 };
 use sqlx::postgres::PgPoolOptions;
 use config::Config;
+use tower::ServiceBuilder;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -32,10 +34,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     sqlx::migrate!("./migrations").run(&pool).await?;
 
     let router = Router::new()
-        .merge(user::router())
-        .layer(middleware::from_fn(jwt::authorize))
-        .route("/token", get(jwt::new))
-        .layer(Extension(pool));
+        .merge(user::router())        
+        .merge(jwt::router())
+        .layer( // TODO: Add the Sevice Builder to JWT. not here
+            ServiceBuilder::new()
+            .layer(Extension(pool))
+        );
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
 
