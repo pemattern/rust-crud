@@ -1,22 +1,18 @@
 use axum::{
     extract::Path,
-    Json,
-    response::{
-        IntoResponse,
-        Response
-    },
     http::StatusCode,
-    Extension,
-    Router,
-    routing::{
-        get,
-        post
-    }
+    middleware,
+    response::{IntoResponse, Response},
+    routing::get,
+    Extension, Json, Router,
 };
 use chrono::{self, DateTime, Local};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use sqlx::postgres::PgPool;
+use tower::ServiceBuilder;
+use uuid::Uuid;
+
+use crate::jwt;
 
 #[derive(sqlx::FromRow, Serialize, Deserialize)]
 pub struct GetUser {
@@ -35,22 +31,25 @@ pub struct PostUser {
 
 pub fn router() -> Router {
     Router::new()
-        .route("/user/:uuid", get(get_user))
-        .route("/users", get(get_all_users))
-        .route("/user", post(post_user))
+        .route("/users/:uuid", get(get_user))
+        .route("/users", get(get_all_users).post(post_user))
+        .layer(ServiceBuilder::new().layer(middleware::from_fn(jwt::authorize)))
 }
 
-pub async fn get_user(
-    Extension(pool): Extension<PgPool>,
-    Path(uuid): Path<Uuid>,
-) -> Response {
+pub async fn get_user(Extension(pool): Extension<PgPool>, Path(uuid): Path<Uuid>) -> Response {
     let query = "SELECT * FROM users WHERE uuid = $1";
 
-    match sqlx::query_as::<_, GetUser>(query).bind(&uuid).fetch_one(&pool).await {
+    match sqlx::query_as::<_, GetUser>(query)
+        .bind(&uuid)
+        .fetch_one(&pool)
+        .await
+    {
         Ok(user) => (StatusCode::OK, Json(user)).into_response(),
-        Err(sqlx::Error::RowNotFound) => (StatusCode::NOT_FOUND, "could not find user").into_response(),
+        Err(sqlx::Error::RowNotFound) => {
+            (StatusCode::NOT_FOUND, "could not find user").into_response()
+        }
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "failed to get user").into_response(),
-    }    
+    }
 }
 
 pub async fn get_all_users(Extension(pool): Extension<PgPool>) -> Response {
@@ -60,7 +59,7 @@ pub async fn get_all_users(Extension(pool): Extension<PgPool>) -> Response {
         Ok(users) => (StatusCode::OK, Json(users)).into_response(),
         Err(sqlx::Error::RowNotFound) => (StatusCode::NOT_FOUND, "no users found").into_response(),
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "failed to get users").into_response(),
-    }   
+    }
 }
 
 pub async fn post_user(Extension(pool): Extension<PgPool>, Json(user): Json<PostUser>) -> Response {
@@ -69,12 +68,14 @@ pub async fn post_user(Extension(pool): Extension<PgPool>, Json(user): Json<Post
     let now = chrono::offset::Local::now();
 
     match sqlx::query(query)
-    .bind(&Uuid::new_v4())
-    .bind(&user.name)
-    .bind(&user.password)
-    .bind(&now)
-    .bind(&now)
-    .execute(&pool).await {
+        .bind(&Uuid::new_v4())
+        .bind(&user.name)
+        .bind(&user.password)
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+    {
         Ok(_) => (StatusCode::CREATED, "created user").into_response(),
         Err(sqlx::Error::Database(error)) => {
             // Unique violation code
@@ -83,8 +84,7 @@ pub async fn post_user(Extension(pool): Extension<PgPool>, Json(user): Json<Post
             } else {
                 (StatusCode::BAD_REQUEST, "could not create user").into_response()
             }
-        },
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "failed to create user").into_response()
+        }
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "failed to create user").into_response(),
     }
 }
-
