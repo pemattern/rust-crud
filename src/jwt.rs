@@ -1,5 +1,6 @@
 use std::env;
 
+use crate::user::GetUser;
 use axum::{
     extract::Request,
     http::StatusCode,
@@ -16,8 +17,6 @@ use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-
-use crate::user::GetUser;
 
 #[derive(Serialize, Deserialize)]
 pub struct Claims {
@@ -44,8 +43,7 @@ pub async fn new(
         .await
     {
         Ok(user) => user.uuid.to_string(),
-        Err(error) => {
-            println!("{}", error);
+        Err(_) => {
             return StatusCode::UNAUTHORIZED.into_response();
         }
     };
