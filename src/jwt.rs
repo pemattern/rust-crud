@@ -1,14 +1,20 @@
 use std::env;
 
 use axum::{
-    http::{Request, StatusCode},
+    extract::Request,
+    http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
-    TypedHeader, headers::{authorization::Basic, Authorization}, Extension, Router, routing::get,
+    routing::get,
+    Extension, Router,
 };
-use chrono::{Utc, Duration};
-use jsonwebtoken::{encode, EncodingKey, Header, DecodingKey, decode, Validation};
-use serde::{Serialize, Deserialize};
+use axum_extra::{
+    headers::{authorization::Basic, Authorization},
+    TypedHeader,
+};
+use chrono::{Duration, Utc};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
 use crate::user::GetUser;
@@ -22,25 +28,27 @@ pub struct Claims {
 }
 
 pub fn router() -> Router {
-    Router::new()
-        .route("/token", get(new))
+    Router::new().route("/token", get(new))
 }
 
-pub async fn new(Extension(pool): Extension<PgPool>,
-    TypedHeader(authorization): TypedHeader<Authorization<Basic>>) -> Response {
+pub async fn new(
+    Extension(pool): Extension<PgPool>,
+    TypedHeader(authorization): TypedHeader<Authorization<Basic>>,
+) -> Response {
     let query = "SELECT * FROM users WHERE name = $1 AND password = $2";
-    
+
     let sub = match sqlx::query_as::<_, GetUser>(query)
         .bind(&authorization.username())
         .bind(&authorization.password())
         .fetch_one(&pool)
-        .await {
-            Ok(user) => user.uuid.to_string(),
-            Err(error) => {
-                println!("{}", error);
-                return StatusCode::UNAUTHORIZED.into_response();
-            },
-        };
+        .await
+    {
+        Ok(user) => user.uuid.to_string(),
+        Err(error) => {
+            println!("{}", error);
+            return StatusCode::UNAUTHORIZED.into_response();
+        }
+    };
 
     let now = Utc::now();
     let iat = now.timestamp() as usize;
@@ -66,15 +74,15 @@ pub async fn new(Extension(pool): Extension<PgPool>,
     }
 }
 
-pub async fn authorize<B>(request: Request<B>, next: Next<B>) -> Response {
+pub async fn authorize(request: Request, next: Next) -> Response {
     let secret = match env::var("JWT_SECRET") {
         Ok(secret) => secret,
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
     let key = DecodingKey::from_secret(secret.as_bytes());
     let issuer = match env::var("JWT_ISSUER") {
         Ok(issuer) => issuer,
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
     let mut validation = Validation::new(jsonwebtoken::Algorithm::HS256);
     validation.set_issuer(&[issuer]);
@@ -95,10 +103,11 @@ pub async fn authorize<B>(request: Request<B>, next: Next<B>) -> Response {
 
     let jwt = authorization.trim_start_matches("Bearer ");
 
-    let _claims = match decode::<Claims>(&jwt, &key, &Validation::new(jsonwebtoken::Algorithm::HS256)) {
-        Ok(token_data) => token_data.claims,
-        Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
-    };  
+    let _claims =
+        match decode::<Claims>(&jwt, &key, &Validation::new(jsonwebtoken::Algorithm::HS256)) {
+            Ok(token_data) => token_data.claims,
+            Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
+        };
 
     next.run(request).await
 }
