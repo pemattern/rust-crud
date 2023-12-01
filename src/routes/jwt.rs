@@ -26,7 +26,7 @@ pub struct Claims {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct JWTResponse {
+pub struct GetJWT {
     pub access_token: String,
     pub token_type: String,
     pub expires_in: i64,
@@ -76,7 +76,7 @@ pub async fn new(
     match encode(&Header::default(), &claims, &key) {
         Ok(jwt) => (
             StatusCode::OK,
-            Json(JWTResponse {
+            Json(GetJWT {
                 access_token: jwt,
                 token_type: String::from("Bearer"),
                 expires_in: expires_in_seconds,
