@@ -1,7 +1,6 @@
 mod config;
-mod jwt;
 mod keygen;
-mod user;
+mod routes;
 
 use axum::{Extension, Router};
 use config::Config;
@@ -33,8 +32,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     sqlx::migrate!("./migrations").run(&pool).await?;
 
     let router = Router::new()
-        .merge(user::router())
-        .merge(jwt::router())
+        .merge(routes::todos::router())
+        .merge(routes::users::router())
+        .merge(routes::jwt::router())
         .layer(
             ServiceBuilder::new()
                 .layer(Extension(pool))
