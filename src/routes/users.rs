@@ -1,5 +1,5 @@
+use crate::routes::jwt;
 use axum::{
-    extract::Path,
     http::StatusCode,
     middleware,
     response::{IntoResponse, Response},
@@ -11,8 +11,6 @@ use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPool;
 use tower::ServiceBuilder;
 use uuid::Uuid;
-
-use crate::jwt;
 
 #[derive(sqlx::FromRow, Serialize, Deserialize)]
 pub struct GetUser {
@@ -31,13 +29,21 @@ pub struct PostUser {
 
 pub fn router() -> Router {
     Router::new()
-        .route("/users/:uuid", get(get_user))
-        .route("/users", get(get_all_users).post(post_user))
+        .route("/user", get(get_user).post(post_user))
+        .route("/users", get(get_all_users))
         .layer(ServiceBuilder::new().layer(middleware::from_fn(jwt::authorize)))
 }
 
-pub async fn get_user(Extension(pool): Extension<PgPool>, Path(uuid): Path<Uuid>) -> Response {
+pub async fn get_user(
+    Extension(pool): Extension<PgPool>,
+    Extension(claims): Extension<jwt::Claims>,
+) -> Response {
     let query = "SELECT * FROM users WHERE uuid = $1";
+
+    let uuid = match Uuid::parse_str(&claims.sub) {
+        Ok(uuid) => uuid,
+        Err(_) => return (StatusCode::BAD_REQUEST, "invalid uuid").into_response(),
+    };
 
     match sqlx::query_as::<_, GetUser>(query)
         .bind(&uuid)
