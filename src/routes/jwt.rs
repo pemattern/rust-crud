@@ -15,6 +15,7 @@ use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Claims {
@@ -114,6 +115,11 @@ pub async fn authorize(
             Err(_) => return StatusCode::UNAUTHORIZED.into_response(),
         };
 
-    request.extensions_mut().insert(claims);
+    let user = match Uuid::parse_str(&claims.sub) {
+        Ok(uuid) => uuid,
+        Err(_) => return (StatusCode::BAD_REQUEST, "invalid user").into_response(),
+    };
+
+    request.extensions_mut().insert(user);
     next.run(request).await
 }

@@ -29,20 +29,14 @@ pub struct PostUser {
 pub fn router() -> Router {
     Router::new()
         .route("/user", get(get_user).post(post_user))
-        .route("/users", get(get_all_users))
         .layer(ServiceBuilder::new().layer(middleware::from_fn(jwt::authorize)))
 }
 
 pub async fn get_user(
     Extension(pool): Extension<PgPool>,
-    Extension(claims): Extension<jwt::Claims>,
+    Extension(user): Extension<Uuid>,
 ) -> Response {
-    let uuid = match Uuid::parse_str(&claims.sub) {
-        Ok(uuid) => uuid,
-        Err(_) => return (StatusCode::BAD_REQUEST, "invalid uuid").into_response(),
-    };
-
-    match sqlx::query_as!(GetUser, "SELECT * FROM users WHERE uuid = $1", &uuid)
+    match sqlx::query_as!(GetUser, "SELECT * FROM users WHERE uuid = $1", &user)
         .fetch_one(&pool)
         .await
     {
@@ -51,17 +45,6 @@ pub async fn get_user(
             (StatusCode::NOT_FOUND, "could not find user").into_response()
         }
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "failed to get user").into_response(),
-    }
-}
-
-pub async fn get_all_users(Extension(pool): Extension<PgPool>) -> Response {
-    match sqlx::query_as!(GetUser, "SELECT * FROM users")
-        .fetch_all(&pool)
-        .await
-    {
-        Ok(users) => (StatusCode::OK, Json(users)).into_response(),
-        Err(sqlx::Error::RowNotFound) => (StatusCode::NOT_FOUND, "no users found").into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "failed to get users").into_response(),
     }
 }
 
