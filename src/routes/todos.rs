@@ -8,21 +8,20 @@ use axum::{
 };
 use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use sqlx::{postgres::PgPool, types::Uuid};
 use tower::ServiceBuilder;
-use uuid::Uuid;
 
-#[derive(sqlx::FromRow, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct GetToDo {
     pub uuid: Uuid,
     pub owner: Uuid,
     pub title: String,
-    pub content: String,
+    pub content: Option<String>,
     pub created_on: DateTime<Local>,
     pub updated_on: DateTime<Local>,
 }
 
-#[derive(sqlx::FromRow, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct PostToDo {
     pub title: String,
     pub content: String,
@@ -38,19 +37,16 @@ pub async fn get_todos(
     Extension(pool): Extension<PgPool>,
     Extension(claims): Extension<jwt::Claims>,
 ) -> Response {
-    let query = "SELECT * FROM todos WHERE owner = $1";
-
     let uuid = match Uuid::parse_str(&claims.sub) {
         Ok(uuid) => uuid,
         Err(_) => return (StatusCode::BAD_REQUEST, "invalid uuid").into_response(),
     };
 
-    match sqlx::query_as::<_, GetToDo>(query)
-        .bind(&uuid)
+    match sqlx::query_as!(GetToDo, "SELECT * FROM todos WHERE owner = $1", &uuid)
         .fetch_all(&pool)
         .await
     {
-        Ok(todo) => (StatusCode::OK, Json(todo)).into_response(),
+        Ok(todos) => (StatusCode::OK, Json(todos)).into_response(),
         Err(sqlx::Error::RowNotFound) => {
             (StatusCode::NOT_FOUND, "could not find todos").into_response()
         }
@@ -63,21 +59,19 @@ pub async fn post_todo(
     Extension(claims): Extension<jwt::Claims>,
     Json(todo): Json<PostToDo>,
 ) -> Response {
-    let query = "INSERT INTO todos (uuid, owner, title, content, created_on, updated_on) VALUES ($1, $2, $3, $4, $5, $6)";
-
     let now = chrono::offset::Local::now();
     let uuid = match Uuid::parse_str(&claims.sub) {
         Ok(uuid) => uuid,
         Err(_) => return (StatusCode::BAD_REQUEST, "invalid uuid").into_response(),
     };
 
-    match sqlx::query(query)
-        .bind(&Uuid::new_v4())
-        .bind(&uuid)
-        .bind(&todo.title)
-        .bind(&todo.content)
-        .bind(&now)
-        .bind(&now)
+    match sqlx::query!("INSERT INTO todos (uuid, owner, title, content, created_on, updated_on) VALUES ($1, $2, $3, $4, $5, $6)",
+        &Uuid::new_v4(),
+        &uuid,
+        &todo.title,
+        &todo.content,
+        &now,
+        &now)
         .execute(&pool)
         .await
     {

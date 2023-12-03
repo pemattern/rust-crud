@@ -1,4 +1,4 @@
-use crate::routes::users::GetUser;
+use crate::{config::Config, routes::users::GetUser};
 use axum::{
     extract::Request,
     http::StatusCode,
@@ -15,7 +15,6 @@ use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use std::env;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Claims {
@@ -38,16 +37,19 @@ pub fn router() -> Router {
 
 pub async fn new(
     Extension(pool): Extension<PgPool>,
+    Extension(config): Extension<Config>,
     TypedHeader(authorization): TypedHeader<Authorization<Basic>>,
 ) -> Response {
     let expires_in_seconds = 3600;
-    let query = "SELECT * FROM users WHERE name = $1 AND password = $2";
 
-    let sub = match sqlx::query_as::<_, GetUser>(query)
-        .bind(&authorization.username())
-        .bind(&authorization.password())
-        .fetch_one(&pool)
-        .await
+    let sub = match sqlx::query_as!(
+        GetUser,
+        "SELECT * FROM users WHERE name = $1 AND password = $2",
+        &authorization.username(),
+        &authorization.password()
+    )
+    .fetch_one(&pool)
+    .await
     {
         Ok(user) => user.uuid.to_string(),
         Err(_) => {
@@ -57,20 +59,12 @@ pub async fn new(
 
     let now = Utc::now();
     let iat = now.timestamp() as usize;
-
     let expires_at = now + Duration::seconds(expires_in_seconds);
     let exp = expires_at.timestamp() as usize;
-
-    let iss = match env::var("JWT_ISSUER") {
-        Ok(issuer) => issuer,
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
-
+    let iss = config.jwt.issuer;
     let claims = Claims { sub, exp, iat, iss };
-    let secret = match env::var("JWT_SECRET") {
-        Ok(secret) => secret,
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
+
+    let secret = config.jwt.secret;
     let key = EncodingKey::from_secret(secret.as_bytes());
 
     match encode(&Header::default(), &claims, &key) {
@@ -87,16 +81,14 @@ pub async fn new(
     }
 }
 
-pub async fn authorize(mut request: Request, next: Next) -> Response {
-    let secret = match env::var("JWT_SECRET") {
-        Ok(secret) => secret,
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
+pub async fn authorize(
+    Extension(config): Extension<Config>,
+    mut request: Request,
+    next: Next,
+) -> Response {
+    let secret = config.jwt.secret;
     let key = DecodingKey::from_secret(secret.as_bytes());
-    let issuer = match env::var("JWT_ISSUER") {
-        Ok(issuer) => issuer,
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-    };
+    let issuer = config.jwt.issuer;
     let mut validation = Validation::new(jsonwebtoken::Algorithm::HS256);
     validation.set_issuer(&[issuer]);
 
