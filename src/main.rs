@@ -14,22 +14,23 @@ use tower_http::{compression::CompressionLayer, timeout::TimeoutLayer, trace::Tr
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::load();
 
-    let database_url = format!(
-        "postgres://{}:{}@{}:{}/{}",
-        config.postgres.user,
-        config.postgres.password,
-        config.postgres.host,
-        config.postgres.port,
-        config.postgres.database,
-    );
+    println!("DATABASE_URL: {}", config.postgres.database_url);
 
-    println!("connection URL: {database_url}");
-
-    let pool = PgPoolOptions::new().connect(database_url.as_str()).await?;
+    let pool = PgPoolOptions::new()
+        .connect(&config.postgres.database_url.as_str())
+        .await?;
 
     println!("successfully connected to the postgres database");
 
     sqlx::migrate!("./migrations").run(&pool).await?;
+    sqlx::query!(
+        "INSERT INTO users (uuid, name, password, created_on, updated_on)
+        VALUES ($1, 'admin', 'pass', '2023-01-01', '2023-01-01')
+        ON CONFLICT DO NOTHING",
+        sqlx::types::Uuid::parse_str("00000000-0000-0000-0000-000000000000").unwrap()
+    )
+    .execute(&pool)
+    .await?;
 
     let router = Router::new()
         .merge(routes::todos::router())
@@ -38,6 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .layer(
             ServiceBuilder::new()
                 .layer(Extension(pool))
+                .layer(Extension(config))
                 .layer(TraceLayer::new_for_http())
                 .layer(CompressionLayer::new())
                 .layer(TimeoutLayer::new(Duration::from_secs(5))),

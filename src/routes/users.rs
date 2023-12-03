@@ -8,11 +8,10 @@ use axum::{
 };
 use chrono::{self, DateTime, Local};
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::PgPool;
+use sqlx::{postgres::PgPool, types::Uuid};
 use tower::ServiceBuilder;
-use uuid::Uuid;
 
-#[derive(sqlx::FromRow, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct GetUser {
     pub uuid: Uuid,
     pub name: String,
@@ -21,7 +20,7 @@ pub struct GetUser {
     pub updated_on: DateTime<Local>,
 }
 
-#[derive(sqlx::FromRow, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct PostUser {
     pub name: String,
     pub password: String,
@@ -38,15 +37,12 @@ pub async fn get_user(
     Extension(pool): Extension<PgPool>,
     Extension(claims): Extension<jwt::Claims>,
 ) -> Response {
-    let query = "SELECT * FROM users WHERE uuid = $1";
-
     let uuid = match Uuid::parse_str(&claims.sub) {
         Ok(uuid) => uuid,
         Err(_) => return (StatusCode::BAD_REQUEST, "invalid uuid").into_response(),
     };
 
-    match sqlx::query_as::<_, GetUser>(query)
-        .bind(&uuid)
+    match sqlx::query_as!(GetUser, "SELECT * FROM users WHERE uuid = $1", &uuid)
         .fetch_one(&pool)
         .await
     {
@@ -59,9 +55,10 @@ pub async fn get_user(
 }
 
 pub async fn get_all_users(Extension(pool): Extension<PgPool>) -> Response {
-    let query = "SELECT * FROM users";
-
-    match sqlx::query_as::<_, GetUser>(query).fetch_all(&pool).await {
+    match sqlx::query_as!(GetUser, "SELECT * FROM users")
+        .fetch_all(&pool)
+        .await
+    {
         Ok(users) => (StatusCode::OK, Json(users)).into_response(),
         Err(sqlx::Error::RowNotFound) => (StatusCode::NOT_FOUND, "no users found").into_response(),
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "failed to get users").into_response(),
@@ -69,16 +66,14 @@ pub async fn get_all_users(Extension(pool): Extension<PgPool>) -> Response {
 }
 
 pub async fn post_user(Extension(pool): Extension<PgPool>, Json(user): Json<PostUser>) -> Response {
-    let query = "INSERT INTO users (uuid, name, password, created_on, updated_on) VALUES ($1, $2, $3, $4, $5)";
-
     let now = chrono::offset::Local::now();
 
-    match sqlx::query(query)
-        .bind(&Uuid::new_v4())
-        .bind(&user.name)
-        .bind(&user.password)
-        .bind(&now)
-        .bind(&now)
+    match sqlx::query!("INSERT INTO users (uuid, name, password, created_on, updated_on) VALUES ($1, $2, $3, $4, $5)", 
+        &Uuid::new_v4(), 
+        &user.name, 
+        &user.password, 
+        &now, 
+        &now)
         .execute(&pool)
         .await
     {
