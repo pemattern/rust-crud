@@ -6,11 +6,16 @@ CREATE TABLE IF NOT EXISTS users (
     updated_on timestamptz NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS todos (
+CREATE TABLE IF NOT EXISTS recipes (
     uuid uuid PRIMARY KEY UNIQUE NOT NULL,
     owner uuid REFERENCES users (uuid) NOT NULL,
     title varchar(64) NOT NULL,
-    content varchar(1024),
+    dose_in_grams smallint NOT NULL,
+    yield_in_grams smallint NOT NULL,
+    duration_in_seconds smallint NOT NULL,
+    roast_level varchar(64) NOT NULL,
+    grind_setting varchar(64) NOT NULL,
+    rating_out_of_ten smallint NOT NULL,
     created_on timestamptz NOT NULL,
     updated_on timestamptz NOT NULL    
 );
