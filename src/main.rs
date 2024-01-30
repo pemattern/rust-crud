@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await?;
 
     let router = Router::new()
-        .merge(routes::todos::router())
+        .merge(routes::recipes::router())
         .merge(routes::users::router())
         .merge(routes::jwt::router())
         .layer(
